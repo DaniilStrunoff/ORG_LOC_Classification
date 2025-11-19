@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-22.04
+
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+
+      API_PUBLISH_PORT: "8000"
+      API_HOST: "0.0.0.0"
+
+      MODEL_STORE_ROOT: "${{ github.workspace }}/artifacts/models"
+      HF_HUB_CACHE: "${{ github.workspace }}/artifacts/hf_cache"
+      RUNTIME: "nvidia"
+
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "orgloc"
+      POSTGRES_USER: "orgloc"
+      POSTGRES_PASSWORD: "orgloc"
+
+      GRAFANA_PORT: "3000"
+      GRAFANA_PUBLIC_URL: "http://localhost:3000"
+      GRAFANA_URL: "http://grafana:3000"
+      GRAFANA_ADMIN_DEFAULT_USER: "admin_us"
+      GRAFANA_ADMIN_DEFAULT_PASSWORD: "admin_pass"
+      GRAFANA_DS_NAME: "PostgreSQL"
+      GRAFANA_DS_UID: "postgres_main"
+
+      GRAFANA_TECH_USER_LOGIN: "tech"
+      GRAFANA_TECH_USER_PASSWORD: "supersecret"
+      GRAFANA_TECH_USER_NAME: "Tech_User"
+      GRAFANA_TECH_USER_ROLE: "Admin"
+
+      HF_TOKEN: ""
+      HUGGINGFACE_HUB_TOKEN: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inject HF_TOKEN secret
+        run: |
+          echo "HF_TOKEN=${{ secrets.HF_TOKEN }}" >> $GITHUB_ENV
+          echo "HUGGINGFACE_HUB_TOKEN=${{ secrets.HF_TOKEN }}" >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Bootstrap heavy dependencies
+        run: |
+          python src/bootstrap/bootstrap_gpu.py
+
+      - name: Run tests
+        run: |
+          pytest -vv

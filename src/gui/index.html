@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ORG/LOC</title>
+  <script src="/tailwind.js"></script>
+  <style>
+    .spin {
+      animation: spin 1s linear infinite
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0)
+      }
+
+      to {
+        transform: rotate(360deg)
+      }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-gray-50 text-gray-900">
+  <div class="max-w-5xl mx-auto p-6 space-y-6">
+    <header class="flex items-center justify-between gap-4 flex-wrap">
+      <h1 class="text-2xl font-semibold">ORG/LOC</h1>
+      <div class="flex items-center gap-3">
+        <label for="modelSel" class="text-sm text-gray-600">Model</label>
+        <select id="modelSel" class="border rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring">
+          {% for m in models %}
+          <option value="{{ m }}" {% if m|string==default_model %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+        <a href="/docs" class="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm">Docs</a>
+      </div>
+    </header>
+
+    {% for m in models %}
+    {% set mid = m|replace('/','__') %}
+    <section id="card-{{ mid }}" class="bg-white shadow rounded-2xl p-5 {% if m != default_model %}hidden{% endif %}"
+      data-model="{{ m }}" data-thr-default="{{ '%.2f'|format(thr_defaults.get(m) or 0.5) }}">
+      <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+        <input data-q type="text" class="flex-1 border rounded-xl px-3 py-2 focus:outline-none focus:ring"
+          placeholder="e.g. Sberbank or Saint Petersburg" />
+        <div class="flex items-center gap-2 sm:order-2">
+          <label class="text-sm text-gray-600">Thr</label>
+          <input data-thr type="number" min="0" max="1" step="0.01" placeholder="0.50"
+            class="w-24 border rounded-xl px-3 py-1.5 text-sm">
+          <button data-predict class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white">Classify</button>
+          <button data-train
+            class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm">Train</button>
+          <button data-gpu class="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm">Check GPU</button>
+        </div>
+      </div>
+
+      <!-- Панель с параметрами тренировки всегда видна -->
+      <div data-train-panel class="mt-4 border rounded-xl p-3 space-y-3 bg-gray-50">
+        <div class="text-sm font-medium text-gray-800">Train config</div>
+        <div data-train-fields class="grid gap-3 sm:grid-cols-2 text-sm text-gray-800">
+          <div class="text-xs text-gray-500">Loading config schema…</div>
+        </div>
+      </div>
+
+      <div data-res class="mt-4 hidden"></div>
+
+      <div data-load class="mt-4 hidden">
+        <div class="flex items-center gap-2 text-sm text-gray-700">
+          <span class="spin inline-block h-4 w-4 rounded-full border-2 border-current border-r-transparent"></span>
+          <span>Loading model…</span>
+          <span data-load-pct class="ml-auto tabular-nums text-xs text-gray-600">0.0%</span>
+        </div>
+        <div class="mt-1 w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div data-load-bar class="h-full bg-indigo-500" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div data-trainbox class="mt-3 hidden">
+        <div class="flex items-center gap-2 text-sm text-gray-700">
+          <span class="spin inline-block h-4 w-4 rounded-full border-2 border-current border-r-transparent"></span>
+          <span>Training…</span>
+          <span data-train-pct class="ml-auto tabular-nums text-xs text-gray-600">0.0%</span>
+          <a class="ml-3 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs" target="_blank"
+            rel="noreferrer" href="http://localhost:3000">Open dashboard</a>
+        </div>
+        <div class="mt-1 w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div data-train-bar class="h-full bg-emerald-500" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div data-gpu-box class="mt-3 hidden text-sm"></div>
+
+      <div class="mt-6 border-t pt-4">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button data-eval class="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm">Evaluate
+            val</button>
+          <div data-eval-status class="hidden items-center gap-2 text-sm text-gray-700">
+            <span class="spin inline-block h-4 w-4 rounded-full border-2 border-current border-r-transparent"></span>
+            <span>Evaluating…</span>
+            <span data-eval-pct class="ml-2 tabular-nums text-xs text-gray-600">0.0%</span>
+          </div>
+        </div>
+
+        <div data-eval-box class="mt-4 hidden">
+          <div class="overflow-auto border rounded-xl">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 sticky top-0">
+                <tr class="text-left text-gray-600">
+                  <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="idx">#</th>
+                  <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="text">Text</th>
+                  <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="gold">Gold</th>
+                  <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="pred">Pred</th>
+                  <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="org">ORG</th>
+                  <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="loc">LOC</th>
+                  <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="latency">Latency</th>
+                  <th class="px-3 py-2 font-medium cursor-pointer select-none" data-sort="status">Status</th>
+                </tr>
+              </thead>
+              <tbody data-eval-tbody class="divide-y"></tbody>
+            </table>
+          </div>
+
+          <div data-eval-summary class="mt-3 hidden">
+            <div class="text-sm text-gray-700 flex flex-wrap items-center gap-3">
+              <span>Total: <span data-ev-tot class="font-medium">0</span></span>
+              <span>Covered: <span data-ev-cov class="font-medium">0</span></span>
+              <span>Misclassified: <span data-ev-mis class="font-medium">0</span></span>
+              <span>Acc@covered: <span data-ev-acc class="font-medium">0.0000</span></span>
+              <span>AUC ROC: <span data-ev-auc class="font-medium">-</span></span>
+              <span class="text-gray-500">Thr used: <span data-ev-thr class="font-mono">—</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+
+  <script>
+    const fmtPct = v => `${(Math.max(0, Math.min(1, Number(v) || 0)) * 100).toFixed(1)}%`;
+    const show = (el, on) => el && el.classList.toggle('hidden', !on);
+    const cardFor = (model) => document.querySelector(`[data-model="${CSS.escape(model)}"]`);
+    const setDisabled = (el, on) => { if (!el) return; el.disabled = on; el.classList.toggle('opacity-60', on); el.classList.toggle('cursor-not-allowed', on); };
+    const esc = (s = '') => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    let openApiPromise = null;
+    const getOpenApi = () => {
+      if (!openApiPromise) openApiPromise = fetch('/openapi.json').then(r => r.json());
+      return openApiPromise;
+    };
+
+    async function getTrainSchemaFor(modelName) {
+      const openapi = await getOpenApi();
+      const path = openapi.paths?.["/train/start"];
+      if (!path) return null;
+      const schema = path.post?.requestBody?.content?.["application/json"]?.schema;
+      if (!schema) return null;
+
+      const resolveRef = (ref) => {
+        const name = ref.replace("#/components/schemas/", "");
+        return openapi.components?.schemas?.[name] || null;
+      };
+
+      const checkSchemaMatches = (sch) => {
+        const props = sch.properties || {};
+        const mn = props.model_name;
+        if (!mn) return false;
+        if (mn.const != null) return mn.const === modelName;
+        if (Array.isArray(mn.enum) && mn.enum.length > 0) return mn.enum[0] === modelName;
+        return false;
+      };
+
+      if (schema.oneOf && Array.isArray(schema.oneOf)) {
+        for (const opt of schema.oneOf) {
+          if (opt.$ref) {
+            const sch = resolveRef(opt.$ref);
+            if (sch && checkSchemaMatches(sch)) return sch;
+          } else if (checkSchemaMatches(opt)) {
+            return opt;
+          }
+        }
+      } else if (schema.$ref) {
+        const sch = resolveRef(schema.$ref);
+        if (sch && checkSchemaMatches(sch)) return sch;
+      } else if (checkSchemaMatches(schema)) {
+        return schema;
+      }
+
+      return null;
+    }
+
+    document.querySelectorAll('section[id^="card-"]').forEach(card => {
+      const name = card.dataset.model;
+      const q = card.querySelector('[data-q]');
+      const thr = card.querySelector('[data-thr]');
+      const defThr = card.dataset.thrDefault;
+      if (thr && defThr) thr.value = defThr;
+      const res = card.querySelector('[data-res]');
+      const btnPredict = card.querySelector('[data-predict]');
+      const btnTrain = card.querySelector('[data-train]');
+      const btnGPU = card.querySelector('[data-gpu]');
+
+      const btnEval = card.querySelector('[data-eval]');
+      const evalBox = card.querySelector('[data-eval-box]');
+      const evalTBody = card.querySelector('[data-eval-tbody]');
+      const evalSummary = card.querySelector('[data-eval-summary]');
+      const evalStatus = card.querySelector('[data-eval-status]');
+      const evalPctEl = card.querySelector('[data-eval-pct]');
+      const evTot = card.querySelector('[data-ev-tot]');
+      const evCov = card.querySelector('[data-ev-cov]');
+      const evMis = card.querySelector('[data-ev-mis]');
+      const evAcc = card.querySelector('[data-ev-acc]');
+      const evAuc = card.querySelector('[data-ev-auc]');
+      const evThr = card.querySelector('[data-ev-thr]');
+
+      const trainPanel = card.querySelector('[data-train-panel]');
+      const trainFieldsBox = card.querySelector('[data-train-fields]');
+
+      const state = { loading: false, training: false, predicting: false, evaluating: false };
+      const syncBusy = () => {
+        const busy = state.loading || state.training || state.predicting || state.evaluating;
+        setDisabled(btnPredict, busy);
+        setDisabled(btnTrain, busy);
+        setDisabled(btnEval, busy);
+        setDisabled(q, busy);
+        setDisabled(thr, busy);
+      };
+
+      card._ui = {
+        res, q, thr, btnPredict, btnTrain,
+        state, syncBusy,
+        loadBox: card.querySelector('[data-load]'),
+        loadBar: card.querySelector('[data-load-bar]'),
+        loadPct: card.querySelector('[data-load-pct]'),
+        trainBox: card.querySelector('[data-trainbox]'),
+        trainBar: card.querySelector('[data-train-bar]'),
+        trainPct: card.querySelector('[data-train-pct]'),
+        gpuBox: card.querySelector('[data-gpu-box]'),
+        trainPanel,
+        trainFieldsBox,
+        trainSchema: null,
+
+        setResult(html) { show(res, true); res.innerHTML = html; },
+        setLoad(p) { const on = p > 0 && p < 1; state.loading = on; show(this.loadBox, on); if (on) { const s = fmtPct(p); this.loadBar.style.width = s; this.loadPct.textContent = s; } syncBusy(); },
+        setTrain(running, p) { const on = !!running || (p > 0 && p < 1); state.training = on; show(this.trainBox, on); if (on) { const s = fmtPct(p); this.trainBar.style.width = s; this.trainPct.textContent = s; } syncBusy(); },
+        setPredict(on) { state.predicting = !!on; syncBusy(); },
+        setGPU(report) {
+          show(this.gpuBox, true);
+          const r = report || {};
+          if (r.gpu_visible) {
+            const items = (r.devices || []).map(d => `<li class="py-0.5"><span class="font-medium">${d.id}</span>: ${d.name} (${d.total_mem})</li>`).join('');
+            this.gpuBox.innerHTML = `<div class="text-sm text-gray-700">GPU available</div><ul class="list-disc pl-5 mt-1 text-sm">${items}</ul><div class="text-xs text-gray-500 mt-1">via: ${r.via || '-'}</div>`;
+          } else {
+            this.gpuBox.innerHTML = `<div class="text-sm text-gray-700">GPU unavailable</div><div class="text-xs text-gray-500 mt-1">${r.error || ''}</div>`;
+          }
+        },
+
+        evalStart(total) {
+          show(evalStatus, true);
+          evalPctEl.textContent = fmtPct(0);
+          show(evalBox, true); show(evalSummary, false);
+          state.evaluating = true; syncBusy();
+        },
+        evalStep(i, total, item) {
+          const n = i + 1;
+          const cls = item.status === 'CORRECT' ? 'text-emerald-700'
+            : item.status === 'WRONG' ? 'text-rose-700'
+              : 'text-amber-700';
+
+          const goldPill = item.gold === 'ORG'
+            ? 'bg-emerald-100 text-emerald-800'
+            : 'bg-blue-100 text-blue-800';
+
+          const predPill = item.pred === 'ORG'
+            ? 'bg-emerald-100 text-emerald-800'
+            : item.pred === 'LOC'
+              ? 'bg-blue-100 text-blue-800'
+              : 'bg-amber-100 text-amber-800';
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-3 py-2 text-gray-500">${n}</td>
+            <td class="px-3 py-2 font-medium">${esc(item.text)}</td>
+            <td class="px-3 py-2">
+              <span class="px-2 py-0.5 rounded-lg text-xs ${goldPill}">${esc(item.gold)}</span>
+            </td>
+            <td class="px-3 py-2">
+              <span class="px-2 py-0.5 rounded-lg text-xs ${predPill}">${esc(item.pred)}</span>
+            </td>
+            <td class="px-3 py-2 tabular-nums">${Number(item.org ?? (item.label === 'ORG' ? item.confidence : 1 - (item.confidence || 0)) ?? 0).toFixed(4)}</td>
+            <td class="px-3 py-2 tabular-nums">${Number(item.loc ?? (item.label === 'LOC' ? item.confidence : 1 - (item.confidence || 0)) ?? 0).toFixed(4)}</td>
+            <td class="px-3 py-2 text-gray-600 tabular-nums">${Number(item.latency_ms ?? 0).toFixed(2)} ms</td>
+            <td class="px-3 py-2 font-medium ${cls}">${item.status || (item.error ? 'ERROR' : (item.label === item.gold ? 'CORRECT' : 'WRONG'))}</td>
+          `;
+          evalTBody.appendChild(tr);
+          evalPctEl.textContent = fmtPct(n / Math.max(1, total));
+          const sc = evalTBody.parentElement;
+          if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+        },
+        evalDone(report) {
+          show(evalStatus, false);
+          show(evalSummary, true);
+          evTot.textContent = report.total ?? 0;
+          evCov.textContent = report.covered ?? 0;
+          evMis.textContent = report.misclassified ?? 0;
+          evAcc.textContent = (Number(report.acc_covered) || 0).toFixed(4);
+          evAuc.textContent = report.auc_roc != null ? Number(report.auc_roc).toFixed(4) : '—';
+          evThr.textContent = (report.threshold ?? this.thr?.value ?? '—');
+          state.evaluating = false; syncBusy();
+        }
+      };
+
+      async function ensureTrainSchemaLoaded() {
+        if (card._ui.trainSchema) return;
+        const schema = await getTrainSchemaFor(name);
+        if (!schema) {
+          trainFieldsBox.innerHTML = '<div class="text-xs text-rose-600">Failed to load train config schema</div>';
+          return;
+        }
+        card._ui.trainSchema = schema;
+        trainFieldsBox.innerHTML = '';
+        const props = schema.properties || {};
+        Object.entries(props).forEach(([fname, prop]) => {
+          if (fname === "model_name") return;
+
+          const label = prop.title || fname;
+          const desc = prop.description || "";
+          const wrap = document.createElement("div");
+
+          const isNumber = prop.type === "integer" || prop.type === "number";
+          const isArray = prop.type === "array";
+
+          const rawDefault = prop.default;
+          const defaultScalar = rawDefault != null && !Array.isArray(rawDefault) ? String(rawDefault) : "";
+          const defaultArray = Array.isArray(rawDefault) ? rawDefault.map(v => String(v)) : [];
+
+          const minAttr = prop.minimum != null ? `min="${prop.minimum}"` : "";
+          const maxAttr = prop.maximum != null ? `max="${prop.maximum}"` : "";
+
+          if (isArray && prop.items && Array.isArray(prop.items.enum) && prop.items.enum.length > 0) {
+            const options = prop.items.enum.map(v => {
+              const vs = String(v);
+              const checked = defaultArray.includes(vs);
+              return `
+                <label class="flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    value="${esc(vs)}"
+                    class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    ${checked ? "checked" : ""}
+                  >
+                  <span>${esc(vs)}</span>
+                </label>
+              `;
+            }).join("");
+
+            wrap.innerHTML = `
+              <label class="block text-xs font-medium text-gray-700 mb-1">${esc(label)}</label>
+              <div data-train-field="${esc(fname)}" class="space-y-1">
+                ${options}
+              </div>
+              ${desc ? `<p class="mt-1 text-[11px] text-gray-500">${esc(desc)}</p>` : ""}
+            `;
+            trainFieldsBox.appendChild(wrap);
+            return;
+          }
+
+          const type = isNumber ? "number" : "text";
+          const def = defaultScalar;
+
+          wrap.innerHTML = `
+            <label class="block text-xs font-medium text-gray-700 mb-1">${esc(label)}</label>
+            <input data-train-field="${esc(fname)}"
+              type="${type}"
+              class="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring"
+              value="${esc(def)}"
+              ${minAttr} ${maxAttr}
+            >
+            ${desc ? `<p class="mt-1 text-[11px] text-gray-500">${esc(desc)}</p>` : ""}
+          `;
+          trainFieldsBox.appendChild(wrap);
+
+          const input = wrap.querySelector("input");
+          if (input && input.type === "number") {
+            const def = prop.default;
+            input.addEventListener("blur", () => {
+              console.log("prop.type", prop.type)
+              if (input.value === "") {
+                input.value = def;
+                return;
+              }
+              let v = Number(input.value);
+              if (!Number.isFinite(v)) {
+                input.value = def;
+                return;
+              }
+              if (prop.type === "integer") {
+                v = Math.round(v);
+              }
+              const min = input.min === "" ? NaN : Number(input.min);
+              const max = input.max === "" ? NaN : Number(input.max);
+
+              if (!Number.isNaN(min) && v < min) v = min;
+              if (!Number.isNaN(max) && v > max) v = max;
+
+              input.value = String(v);
+            });
+          }
+        });
+      }
+      ensureTrainSchemaLoaded().catch(() => { });
+
+      btnPredict.onclick = async () => {
+        const text = (q.value || '').trim();
+        if (!text) return;
+        const t = (thr.value || '').trim();
+        const qs = new URLSearchParams({ model_name: name, q: text });
+        if (t) qs.set('threshold', t);
+        await fetch(`/predict/start?${qs.toString()}`, { method: 'POST' });
+      };
+
+      btnTrain.onclick = async () => {
+        await ensureTrainSchemaLoaded();
+        const schema = card._ui.trainSchema;
+        if (!schema) return;
+        const body = { model_name: name };
+        const props = schema.properties || {};
+        Object.entries(props).forEach(([fname, prop]) => {
+          if (fname === "model_name") return;
+
+          if (prop.type === "array") {
+            const boxContainer = card.querySelector(`[data-train-field="${CSS.escape(fname)}"]`);
+            if (!boxContainer) return;
+            const boxes = boxContainer.querySelectorAll('input[type="checkbox"]');
+            const values = [];
+            boxes.forEach(b => {
+              if (b.checked) values.push(b.value);
+            });
+            body[fname] = values;
+            return;
+          }
+
+          const input = card.querySelector(`[data-train-field="${CSS.escape(fname)}"]`);
+          if (!input) return;
+          let v = input.value;
+          if (v === '' || v == null) {
+            if (prop.default != null) v = String(prop.default);
+          }
+          if (prop.type === "integer" || prop.type === "number") {
+            const n = Number(v);
+            if (!Number.isNaN(n)) body[fname] = n;
+          } else {
+            body[fname] = v;
+          }
+        });
+        await fetch('/train/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      };
+
+      btnGPU.onclick = async () => {
+        await fetch(`/gpu/check`, { method: 'POST' });
+      };
+
+      btnEval.onclick = async () => {
+        evalTBody.innerHTML = '';
+        show(evalBox, true);
+        show(evalSummary, false);
+        show(evalStatus, true);
+        evalPctEl.textContent = '0.0%';
+        state.evaluating = true; syncBusy();
+
+        const t = (thr.value || '').trim();
+        const qs = new URLSearchParams({ model_name: name });
+        if (t) qs.set('threshold', t);
+        await fetch(`/predict/val?${qs.toString()}`, { method: 'GET' });
+      };
+
+      const makeSortable = (card) => {
+        const hdrs = card.querySelectorAll('[data-eval-box] thead th[data-sort]');
+        if (!hdrs.length) return;
+        const idxMap = Array.from(hdrs).map((th, i) => [th.dataset.sort, i]).reduce((a, [k, i]) => (a[k] = i, a), {});
+        const statusRank = { 'CORRECT': 2, 'WRONG': 1, 'ERROR': 0 };
+        hdrs.forEach((th) => {
+          th.addEventListener('click', () => {
+            const key = th.dataset.sort;
+            const col = idxMap[key];
+            const dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+            hdrs.forEach(h => h.removeAttribute('data-dir'));
+            th.dataset.dir = dir;
+            const tbody = card.querySelector('[data-eval-tbody]');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const getVal = (tr) => {
+              const tds = tr.children;
+              if (key === 'idx') return parseFloat(tds[col].textContent.trim()) || 0;
+              if (key === 'org' || key === 'loc' || key === 'latency')
+                return parseFloat(tds[col].textContent.replace(' ms', '').trim()) || 0;
+              if (key === 'status') return statusRank[tds[col].textContent.trim()] ?? -1;
+              return tds[col].textContent.toLowerCase().trim();
+            };
+            rows.sort((a, b) => {
+              const av = getVal(a), bv = getVal(b);
+              const num = typeof av === 'number' && typeof bv === 'number';
+              const cmp = num ? (av - bv) : (av > bv ? 1 : av < bv ? -1 : 0);
+              return dir === 'asc' ? cmp : -cmp;
+            });
+            rows.forEach(r => tbody.appendChild(r));
+          });
+        });
+      };
+      makeSortable(card);
+    });
+
+    const sel = document.getElementById('modelSel');
+    function showCard(name) {
+      document.querySelectorAll('section[id^="card-"]').forEach(c => { c.classList.toggle('hidden', c.dataset.model !== name); });
+      fetch(`/state?model_name=${encodeURIComponent(name)}`).then(r => r.json()).then(s => {
+        const card = cardFor(name); if (!card) return; const ui = card._ui;
+        ui.setLoad(Number(s?.load?.progress ?? 0));
+        ui.setTrain(!!s?.train?.running, Number(s?.train?.progress ?? 0));
+      }).catch(() => { });
+    }
+    showCard(sel.value);
+    sel.addEventListener('change', () => showCard(sel.value));
+
+    const es = new EventSource('/events');
+
+    es.addEventListener('load', (e) => {
+      const d = JSON.parse(e.data);
+      const card = cardFor(d.model); if (!card) return;
+      card._ui.setLoad(Number(d.progress || 0));
+    });
+
+    es.addEventListener('train', (e) => {
+      const d = JSON.parse(e.data);
+      const card = cardFor(d.model); if (!card) return;
+      card._ui.setTrain(!!d.running, Number(d.progress || 0));
+    });
+
+    es.addEventListener('predict', (e) => {
+      const d = JSON.parse(e.data);
+      const card = cardFor(d.model); if (!card || !card._ui) return;
+      const ui = card._ui;
+      if (sel.value !== d.model) { sel.value = d.model; showCard(d.model); }
+
+      if (d.phase === 'start') {
+        ui.setPredict(true);
+        ui.setResult(`
+          <div class="text-sm text-gray-600 flex items-center gap-2">
+            <span class="spin inline-block h-4 w-4 rounded-full border-2 border-current border-r-transparent"></span>
+            Classifying…
+          </div>
+        `);
+        return;
+      }
+
+      if (d.phase === 'error') {
+        ui.setPredict(false);
+        ui.setResult(`<div class="text-rose-600 text-sm">${esc(d.error || 'Inference failed')}</div>`);
+        return;
+      }
+
+      ui.setPredict(false);
+      const conf = d.confidence != null ? Number(d.confidence).toFixed(4) : '-';
+      const latency = d.latency_ms != null ? Number(d.latency_ms) : '-';
+      const labelStr = String(d.label || '').toUpperCase();
+      const intentCls = labelStr === 'ORG' ? 'bg-emerald-100 text-emerald-800'
+        : labelStr === 'LOC' ? 'bg-blue-100 text-blue-800'
+          : 'bg-amber-100 text-amber-800';
+      ui.setResult(`
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-xs text-gray-500 mb-1">Result (<span class="font-mono">${esc(d.model)}</span>)</div>
+            <div class="text-xl font-semibold flex items-center gap-2">
+              ${esc(labelStr)}
+              <span class="px-2.5 py-0.5 rounded-lg text-xs font-medium ${intentCls}">
+                confidence ${conf}
+              </span>
+            </div>
+            <div class="text-sm text-gray-600 mt-1">latency: ${latency} ms</div>
+          </div>
+          <div class="hidden sm:block text-sm text-gray-500">
+            "${esc(String(d.query || ''))}"
+          </div>
+        </div>
+      `);
+    });
+
+    es.addEventListener('eval', (e) => {
+      const d = JSON.parse(e.data);
+      const card = cardFor(d.model); if (!card) return;
+      const ui = card._ui;
+      if (sel.value !== d.model) { sel.value = d.model; showCard(d.model); }
+
+      if (d.phase === 'start') { ui.evalStart(Number(d.total || 0)); return; }
+      if (d.phase === 'step') {
+        const { i = 0, total = 1, text, gold, pred, org, loc, latency_ms, status, label, confidence, error } = d;
+        ui.evalStep(Number(i), Number(total), {
+          text, gold, pred: pred ?? label, org, loc, latency_ms,
+          status: status ?? (error ? 'ERROR' : (label === gold ? 'CORRECT' : 'WRONG')),
+          label, confidence, error
+        });
+        return;
+      }
+      if (d.phase === 'done') { ui.evalDone(d); return; }
+      if (d.phase === 'error') {
+        const box = card.querySelector('[data-eval-box]'); const stat = card.querySelector('[data-eval-status]');
+        const sum = card.querySelector('[data-eval-summary]');
+        if (box) { box.classList.remove('hidden'); }
+        if (stat) { stat.classList.add('hidden'); }
+        if (sum) { sum.classList.add('hidden'); }
+        const tbody = card.querySelector('[data-eval-tbody]');
+        if (tbody) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td colspan="8" class="px-3 py-3 text-sm rounded-lg bg-rose-50 text-rose-700">
+            Evaluation error: ${esc((d.error || 'unknown').toString())}
+          </td>`;
+          tbody.appendChild(tr);
+        }
+        card._ui.state.evaluating = false; card._ui.syncBusy();
+        return;
+      }
+    });
+
+    es.addEventListener('gpu', (e) => {
+      const d = JSON.parse(e.data);
+      const name = d.model ? d.model : sel.value;
+      const card = cardFor(name); if (!card) return;
+      card._ui.setGPU(d.report);
+    });
+  </script>
+</body>
+
+</html>

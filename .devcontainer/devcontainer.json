@@ -1,0 +1,42 @@
+{
+  "name": "orgloc (api-dev)",
+  "dockerComposeFile": [
+    "docker-compose.devcontainer.yaml"
+  ],
+  "service": "api-dev",
+  "runServices": [
+    "api-dev"
+  ],
+  "workspaceFolder": "/app",
+  "overrideCommand": false,
+  "shutdownAction": "stopCompose",
+  "remoteUser": "root",
+  "postCreateCommand": "python -u -m src.bootstrap.bootstrap_gpu || echo 'bootstrap_gpu: skipped'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.vscode-pylance",
+        "ms-python.python",
+        "ms-python.debugpy",
+        "ms-python.vscode-python-envs",
+        "ms-python.black-formatter",
+        "github.vscode-github-actions"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.analysis.typeCheckingMode": "strict",
+        "python.analysis.useLibraryCodeForTypes": false,
+        "python.analysis.exclude": [
+          "**/venv",
+          "**/.venv",
+          "**/site-packages"
+        ],
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.formatOnSave": true
+        }
+      }
+    }
+  }
+}

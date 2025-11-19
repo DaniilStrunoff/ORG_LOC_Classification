@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# Virtual env
+.venv/
+env/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# Models and artifacts
+models/*
+artifacts/*
+*.joblib
+*.onnx
+
+# Logs
+*.log
+logs/
+
+# Docker
+*.pid
+*.seed
+*.swp
+*.swo
+.dockerignore
+
+# Env files
+.env
+.env.*
+!.env.example
